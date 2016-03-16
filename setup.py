@@ -3,11 +3,11 @@
 
 from setuptools import setup, find_packages
 
-import i2cMqttBridge
+import MqttI2cBridge
 
 setup(
-    name='i2cMqttBridge',
-    version=i2cMqttBridge.__version__,
+    name='MqttI2cBridge',
+    version=MqttI2cBridge.__version__,
     packages=find_packages(),
     author="Pierre Lucas",
     author_email="pierre.lucas@altie.fr",
@@ -16,7 +16,7 @@ setup(
     # install_requires = ,  # dependancies (type list: ["gunicorn","docutils
     # >=0.3"])
     include_package_data=True,  # use MANIFEST.in
-    url = 'http://github.com/oryxr/i2cMqttBridge',  # official page of librarie
+    url = 'http://github.com/oryxr/MqttI2cBridge',  # official page of librarie
     # https://pypi.python.org/pypi?%3Aaction=list_classifiers
     classifiers = [
         "Operating System :: OS Independent",
