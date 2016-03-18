@@ -92,7 +92,7 @@ class I2CBus(object):
         except IOError:
             raise DeviceNotFoundException("Could not communicate with device")
 
-    def ReadBlock(self, address, payload):
+    def ReadBlock(self, address, key, value):
         """Reads a block from olimex mod-io.
 
         Args:
@@ -101,12 +101,19 @@ class I2CBus(object):
         """
         try:
             i2c.open(address)
-            i2c.write(payload[0])
-            value = i2c.read(payload[1])
+            i2c.write(key)
+            value = i2c.read(value)
             i2c.close()
             return value
         except IOError:
             raise DeviceNotFoundException("Could not communicate with device")
+
+    def Read(self, address, payload):
+        buffer = self.ReadBlock(address, payload[0], payload[1])
+        data = [0x00]*payload[1]
+        for i in range(len(buffer)):
+            data[i] = buffer[i]
+        return data
 
 
 def on_connect(client, userdata, rc):
@@ -150,8 +157,15 @@ def main(args):
                                for val in i2c_order['payload'].split(" ")]
                               )
             elif i2c_order['topic'][0] == "read":
-                i2c_bus.ReadBlock(int(i2c_order['topic'][1], 16),
-                                  i2c_order['payload'])
+                if debug:
+                    print([[int(i2c_order['payload'].split(" ")[0], 16)],
+                           int(i2c_order['payload'].split(" ")[1])])
+                res = i2c_bus.Read(int(i2c_order['topic'][1], 16),
+                                   [[int(i2c_order['payload'].split(" ")[0],
+                                         16)],
+                                    int(i2c_order['payload'].split(" ")[1])]
+                                   )
+                print(res)
 
 
 if __name__ == "__main__":
