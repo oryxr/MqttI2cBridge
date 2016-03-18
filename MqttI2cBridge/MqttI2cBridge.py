@@ -11,6 +11,7 @@ import paho.mqtt.client as mqtt
 from pyA20 import i2c
 from stackFifoLifo import StackFifo
 
+debug = False
 
 mqttc = mqtt.Client()
 userdata = argparse.Namespace()
@@ -21,7 +22,8 @@ def close_program(sig, frame):
     """Function which close clearly the program"""
     mqttc.loop_stop()
     if sig == int(signal.SIGINT):
-        print("Shutdown with <Ctrl-c>")
+        if debug:
+            print("Shutdown with <Ctrl-c>")
     sys.exit(0)
 
 
@@ -30,14 +32,16 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--debug", action="store_true",
                         help="Debug option")
-    parser.add_argument("-v", "--verbose", action="store_true",
-                        help="Verbose option")
     grp_mqtt = parser.add_argument_group('MQTT')
-    grp_mqtt.add_argument("--topic", type=str, default="i2c", help="mqtt topic")
-    grp_mqtt.add_argument("--host", type=str, default="localhost", help="ip address of host")
-    grp_mqtt.add_argument("--port", type=int, default=1883, help="port of the connected borker")
+    grp_mqtt.add_argument("--topic", type=str, default="i2c",
+                          help="mqtt topic")
+    grp_mqtt.add_argument("--host", type=str, default="localhost",
+                          help="ip address of host")
+    grp_mqtt.add_argument("--port", type=int, default=1883,
+                          help="port of the connected borker")
     grp_i2c = parser.add_argument_group('I2C')
-    grp_i2c.add_argument("--bus", type=str, default="/dev/i2c-1", help="bus I2C")
+    grp_i2c.add_argument("--bus", type=str, default="/dev/i2c-1",
+                         help="bus I2C")
     return parser.parse_args()
 
 
@@ -106,13 +110,17 @@ class I2CBus(object):
 
 
 def on_connect(client, userdata, rc):
-    print("Connected with result code " + str(rc))
+    if debug:
+        print("Connected with result code " + str(rc))
     client.subscribe(userdata.topic+"/#")
 
 
 def on_message(client, userdata, msg):
-    print(msg.topic + " : " + msg.payload.decode())
-    stack_i2c.stack([msg.topic.split('/')[1:], msg.payload.decode()])
+    if debug:
+        print(msg.topic + " : " + msg.payload.decode())
+    stack_i2c.stack({'topic': msg.topic.split('/')[1:],
+                     'payload': msg.payload.decode()
+                     })
 
 
 def main(args):
@@ -120,6 +128,8 @@ def main(args):
     Mqtt <--> i2c Bridge
     ====================
     """
+    global debug
+    debug = args.debug
     i2c_bus = I2CBus(args.bus)
     userdata.topic = args.topic
     mqttc.user_data_set(userdata)
@@ -129,14 +139,19 @@ def main(args):
     mqttc.loop_start()
 
     while True:
-        print(stack_i2c.copyStack())
+        if debug:
+            print(stack_i2c.copyStack())
+            time.sleep(3)
         if not stack_i2c.emptyStack():
             i2c_order = stack_i2c.unstack()
-            if i2c_order['topic'][0] == 'write':
-                i2c_bus.Write(i2c_order['topic'][1], i2c_order['payload'])
-            elif i2c_order['topic'][0] == 'read':
-                i2c_bus.ReadBlock(i2c_order['topic'][1], i2c_order['payload'])
-        time.sleep(5)
+            if i2c_order['topic'][0] == "write":
+                i2c_bus.Write(int(i2c_order['topic'][1], 16),
+                              [int(val, 16)
+                               for val in i2c_order['payload'].split(" ")]
+                              )
+            elif i2c_order['topic'][0] == "read":
+                i2c_bus.ReadBlock(int(i2c_order['topic'][1], 16),
+                                  i2c_order['payload'])
 
 
 if __name__ == "__main__":
