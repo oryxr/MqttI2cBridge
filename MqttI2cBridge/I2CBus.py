@@ -111,16 +111,17 @@ class I2CBus(object):
                 "could not find files for access to I2C bus,"
                 "you need to load the proper modules")
 
-    def Write(self, address, key, value):
+    def Write(self, address, payload):
         """Sends a request to olimex mod-io.
 
         Args:
             key: integer, an address where to wite data.
             value:
         """
-        data = [key, value]
-        # for val in value:
-        #     data.append(val)
+        data = []
+        for val in payload:
+            data.append(val)
+        print(data)
         try:
             i2c.open(address)
             i2c.write(data)
@@ -128,7 +129,7 @@ class I2CBus(object):
         except IOError:
             raise DeviceNotFoundException("Could not communicate with device")
 
-    def ReadBlock(self, address, key, length):
+    def ReadBlock(self, address, payload):
         """Reads a block from olimex mod-io.
 
         Args:
@@ -137,9 +138,10 @@ class I2CBus(object):
         """
         try:
             i2c.open(address)
-            i2c.write([key])
-            value = i2c.read(length)
+            i2c.write(payload[0])
+            value = i2c.read(payload[1])
             i2c.close()
             return value
         except IOError:
             raise DeviceNotFoundException("Could not communicate with device")
+

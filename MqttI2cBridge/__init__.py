@@ -6,4 +6,8 @@
 
 __version__ = "0.0.1"
 
-from .MqttI2cBridge import MqttClient
+from I2CBus import I2CBus
+from MqttClient import MqttClient
+from MqttI2cBridge import MqttI2cBridge
+
+

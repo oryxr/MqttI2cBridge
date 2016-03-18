@@ -6,6 +6,9 @@ import time
 
 from paho.mqtt.client import Client
 
+from stackFifoLifo import StackFifo
+
+
 class MqttClient(Client):
     """Mqtt Client"""
 
@@ -13,6 +16,7 @@ class MqttClient(Client):
     DEFAULT_PORT = 1883
 
     msg = "0"
+    stackFifo = StackFifo()
 
     def __init__(self, topic, host=DEFAULT_HOST, port=DEFAULT_PORT):
         Client.__init__(self)
@@ -29,12 +33,31 @@ class MqttClient(Client):
 
     @staticmethod
     def on__message(client, userdata, msg):
-        MqttClient.msg = msg.payload.decode()
+        MqttClient.stackFifo = {'topic': msg.topic.split('/')[1:], 'payload': msg.payload.decode()}
+        # MqttClient.msg = msg.payload.decode()
         print(msg.topic + ": " + msg.payload.decode())
+
+    def read_msg(self):
+        if self.stackFifo.emptyStack():
+            return None
+        return self.stackFifo.unstack()
+
+
+def error(*objs):
+    print("Error: ", *objs, file=sys.stderr)
 
 
 def main(args):
-    mqttc = MqttClient(topic='altie/#', host='192.168.1.15')
+    """
+    MqttClient class based on paho-mqtt
+    ===================================
+
+    :Args1: <str> address ip to the broker
+    :Args2: <str> topic"""
+    if len(args) < 3:
+        error("Need to specify a command.\n",main.__doc__)
+        return 1
+    mqttc = MqttClient(topic=args[2], host=args[1])
     while True:
         mqttc.publish("test/a",mqttc.msg)
         time.sleep(3)

@@ -1,17 +1,144 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import signal
+import sys
+import argparse
+import time
+
+
 import paho.mqtt.client as mqtt
-from I2CBus import I2CBus
+from pyA20 import i2c
+from stackFifoLifo import StackFifo
 
 
-def error(*objs):
-    print("Error: ", *objs, file=sys.stderr)
+mqttc = mqtt.Client()
+userdata = argparse.Namespace()
+stack_i2c = StackFifo()
 
 
-class I2cMqttBridge(object):
-    """Bridge Mqtt <-> i2c"""
+def close_program(sig, frame):
+    """Function which close clearly the program"""
+    mqttc.loop_stop()
+    if sig == int(signal.SIGINT):
+        print("Shutdown with <Ctrl-c>")
+    sys.exit(0)
 
-    def __init__(self, topic, bus):
-        self._topic = topic
-        self._bus = bus
+
+def parse_args():
+    """Function for parsing consol arguments"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-d", "--debug", action="store_true",
+                        help="Debug option")
+    parser.add_argument("-v", "--verbose", action="store_true",
+                        help="Verbose option")
+    grp_mqtt = parser.add_argument_group('MQTT')
+    grp_mqtt.add_argument("--topic", type=str, default="i2c", help="mqtt topic")
+    grp_mqtt.add_argument("--host", type=str, default="localhost", help="ip address of host")
+    grp_mqtt.add_argument("--port", type=int, default=1883, help="port of the connected borker")
+    grp_i2c = parser.add_argument_group('I2C')
+    grp_i2c.add_argument("--bus", type=str, default="/dev/i2c-1", help="bus I2C")
+    return parser.parse_args()
+
+
+class DeviceNotFoundException(IOError):
+    """Raised if we cannot communicate with the device."""
+
+
+class I2CBusNotConfiguredProperly(IOError):
+    """Raised if we can't find the propber i2cbus setup"""
+
+
+class I2CBus(object):
+    """Represent an I2C bus to read / write data.
+
+    Attributes:
+        address: integer, the address where mod-io can be found.
+    """
+    def __init__(self, bus):
+        """Instantiates a I2CBus
+
+        Args:
+            bus: string, path to bus
+            address: integer, generally 0x58, the address where
+            mod-io can be found
+        """
+        try:
+            i2c.init(bus)
+        except IOError:
+            raise I2CBusNotConfiguredProperly(
+                "could not find files for access to I2C bus,"
+                "you need to load the proper modules")
+
+    def Write(self, address, payload):
+        """Sends a request to olimex mod-io.
+
+        Args:
+            key: integer, an address where to wite data.
+            value:
+        """
+        data = []
+        for val in payload:
+            data.append(val)
+        print(data)
+        try:
+            i2c.open(address)
+            i2c.write(data)
+            i2c.close()
+        except IOError:
+            raise DeviceNotFoundException("Could not communicate with device")
+
+    def ReadBlock(self, address, payload):
+        """Reads a block from olimex mod-io.
+
+        Args:
+            key: interger, an address where to read data from.
+            length: integer, how much data to read.
+        """
+        try:
+            i2c.open(address)
+            i2c.write(payload[0])
+            value = i2c.read(payload[1])
+            i2c.close()
+            return value
+        except IOError:
+            raise DeviceNotFoundException("Could not communicate with device")
+
+
+def on_connect(client, userdata, rc):
+    print("Connected with result code " + str(rc))
+    client.subscribe(userdata.topic+"/#")
+
+
+def on_message(client, userdata, msg):
+    print(msg.topic + " : " + msg.payload.decode())
+    stack_i2c.stack([msg.topic.split('/')[1:], msg.payload.decode()])
+
+
+def main(args):
+    """
+    Mqtt <--> i2c Bridge
+    ====================
+    """
+    i2c_bus = I2CBus(args.bus)
+    userdata.topic = args.topic
+    mqttc.user_data_set(userdata)
+    mqttc.on_connect = on_connect
+    mqttc.on_message = on_message
+    mqttc.connect(args.host, args.port, 60)
+    mqttc.loop_start()
+
+    while True:
+        print(stack_i2c.copyStack())
+        if not stack_i2c.emptyStack():
+            i2c_order = stack_i2c.unstack()
+            if i2c_order['topic'][0] == 'write':
+                i2c_bus.Write(i2c_order['topic'][1], i2c_order['payload'])
+            elif i2c_order['topic'][0] == 'read':
+                i2c_bus.ReadBlock(i2c_order['topic'][1], i2c_order['payload'])
+        time.sleep(5)
+
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGINT, close_program)
+    sys.exit(main(parse_args()))
